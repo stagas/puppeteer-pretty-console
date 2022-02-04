@@ -32,7 +32,7 @@ $ npm i puppeteer-pretty-console
 
 ### puppeteerPrettyConsole
 
-[src/index.ts:16-76](https://github.com/stagas/puppeteer-pretty-console/blob/278457b71514ec77623455172f900aca5b5d521c/src/index.ts#L16-L76 "Source code on GitHub")
+[src/index.ts:16-70](https://github.com/stagas/puppeteer-pretty-console/blob/78c2d042d7f76a39488abf73bf7e542437abdc75/src/index.ts#L16-L70 "Source code on GitHub")
 
 Setups console output for a puppeteer page.
 
