@@ -90,7 +90,7 @@
   },
   "dependencies": {
     "@stagas/chalk": "^5.0.1",
-    "apply-sourcemaps": "0.0.2",
+    "apply-sourcemaps": "0.0.3",
     "event-toolkit": "1.0.1",
     "everyday-utils": "1.0.0",
     "puppeteer": "^15.1.1"

@@ -45,6 +45,10 @@ export function puppeteerPrettyConsole(
     const root = process.cwd()
 
     const location = message.location()
+
+    // cleanup vite's dynamic ?import suffix
+    if (location.url) location.url = location.url.replace('?import', '')
+
     const type = message.type()
 
     try {
