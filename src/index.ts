@@ -1,18 +1,9 @@
 // credits: https://github.com/andywer/puppet-run/blob/40a7eb06ccd8b2b9dcfdeeac273ec27dce6d3c54/src/host-bindings.ts
 
 import chalk from '@stagas/chalk'
-import { applySourceMaps } from 'apply-sourcemaps'
 import { queue } from 'event-toolkit'
 import { getStringLength } from 'everyday-utils'
 import type { Page } from 'puppeteer'
-
-const transformLocations = async (args: any[], root = process.cwd(), href: string) => {
-  for (const [i, x] of args.entries()) {
-    if (typeof x !== 'string') continue
-    args[i] = await applySourceMaps(args[i], root, href)
-  }
-  return args
-}
 
 export const print: any = queue.atomic(async (fn: () => Promise<void>) => {
   await fn()
@@ -23,16 +14,18 @@ export const print: any = queue.atomic(async (fn: () => Promise<void>) => {
  *
  * ```ts
  * const page = await browser.newPage()
- * puppeteerPrettyConsole(page)
+ * pretty(page)
  * ```
  *
  * @param page A puppeteer page instance created by browser.newPage()
  */
 export function puppeteerPrettyConsole(
   page: Page,
-  filter = (args: any[]): any[] => args,
+  transformArgs = (args: any[], _originUrl: string): Promise<any[]> => Promise.resolve(args),
+  failedRequestFilter: (x: string) => boolean = () => true,
+  silent = false,
 ) {
-  // observe stdout for last line length
+  // observe stderr for last line length
   let lastLineLength = 0
   const stderrWrite = process.stderr.write
   process.stderr.write = chunk => {
@@ -40,15 +33,22 @@ export function puppeteerPrettyConsole(
     return stderrWrite.call(process.stderr, chunk)
   }
 
+  const console: any = silent
+    ? {
+      clear() {},
+      groupCollapsed() {},
+      groupEnd() {},
+      group() {},
+      error() {},
+      table() {},
+      log() {},
+      warn() {},
+    }
+    : global.console
+
   page.on('console', async message => {
     const href = new URL(page.url()).href
-    const root = process.cwd()
-
     const location = message.location()
-
-    // cleanup vite's dynamic ?import suffix
-    if (location.url) location.url = location.url.replace('?import', '')
-
     const type = message.type()
 
     try {
@@ -88,16 +88,17 @@ export function puppeteerPrettyConsole(
         if (type === 'startGroup') {
           console.group(...args)
         } else {
-          await transformLocations(args, root, href)
-          args = filter(args)
-          console.error(...args)
+          args = await transformArgs(args, href)
+          if (type === 'table') {
+            console.table(...args)
+          } else {
+            console.error(...args)
+          }
         }
 
-        const loc = (await transformLocations(
-          [location.url + `:${(location.lineNumber || 0) + 1}:${(location.columnNumber || 0) + 1}`],
-          root,
-          href
-        ))[0]
+        const [loc] = await transformArgs([
+          `${location.url}:${(location.lineNumber || 0) + 1}:${(location.columnNumber || 0) + 1}`,
+        ], href)
 
         const col = process.stdout.columns - getStringLength(loc) - 1
 
@@ -114,8 +115,11 @@ export function puppeteerPrettyConsole(
 
   page.on('requestfailed', request => {
     const failure = request.failure()
-    console.error(chalk.redBright(`Request failed: ${request.method()} ${request.url()}`))
-    console.error(chalk.gray(`  ${failure ? failure.errorText : 'Unknown error'}`))
+    const msg = `Request failed: ${request.method()} ${request.url()}`
+    if (failedRequestFilter(msg)) {
+      console.error(chalk.redBright(msg))
+      console.error(chalk.gray(`  ${failure ? failure.errorText : 'Unknown error'}`))
+    }
   })
 
   page.on('requestfinished', request => {
@@ -127,14 +131,24 @@ export function puppeteerPrettyConsole(
     }
   })
 
-  page.on('error', error => {
-    console.error(chalk.redBright('Page crashed:'))
-    console.error(chalk.redBright(error.message + error.stack))
+  page.on('error', async error => {
+    const fn = async () => {
+      const href = new URL(page.url()).href
+      const [msg] = await transformArgs([error.message + error.stack], href)
+      console.error(chalk.redBright('Page crashed:'))
+      console.error(chalk.redBright(msg))
+    }
+    print(fn)
   })
 
   page.on('pageerror', error => {
-    console.error(chalk.redBright('Uncaught exception:'))
-    console.error(chalk.redBright(error.message + error.stack))
+    const fn = async () => {
+      const href = new URL(page.url()).href
+      const [msg] = await transformArgs([error.message + error.stack], href)
+      console.error(chalk.redBright('Uncaught exception:'))
+      console.error(chalk.redBright(msg))
+    }
+    print(fn)
   })
 }
 
